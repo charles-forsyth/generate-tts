@@ -1,10 +1,11 @@
 from typing import Optional, List, Dict, Any
 import sys
 import os
+import tempfile
 from google import genai
 from google.genai import types
 from gen_tts.config import settings, USER_CONFIG_FILE
-from gen_tts.utils import wave_file
+from gen_tts.utils import wave_file, convert_audio_format
 
 def list_gemini_voices() -> List[str]:
     """Returns a list of available Gemini TTS voices."""
@@ -101,6 +102,7 @@ def generate_speech_gemini(
                     )
                 )
             )
+        )
 
         speech_config = types.SpeechConfig(
             multi_speaker_voice_config=types.MultiSpeakerVoiceConfig(
@@ -129,15 +131,11 @@ def generate_speech_gemini(
         )
 
         # Accessing data in V2 SDK
-        # response.candidates[0].content.parts[0].inline_data.data
         if not response.candidates:
              raise RuntimeError(f"Gemini API returned no candidates. Full response: {response}")
 
         candidate = response.candidates[0]
         
-        # Check for unsuccessful finish reasons (V2 SDK usually handles this, but good to check)
-        # In V2, finish_reason is often an enum or string.
-        # We will check if content is present.
         if not candidate.content or not candidate.content.parts:
              finish_reason = getattr(candidate, 'finish_reason', 'UNKNOWN')
              safety_ratings = getattr(candidate, 'safety_ratings', 'N/A')
@@ -151,11 +149,22 @@ def generate_speech_gemini(
         if not audio_data:
             raise RuntimeError("Gemini API returned empty audio data.")
         
-        if audio_format.upper() == "WAV":
-            wave_file(output_file, audio_data, rate=24000)
+        # Always wrap in WAV container first because API returns PCM
+        if audio_format.upper() == "MP3":
+            # Use a temp file for the WAV
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav:
+                temp_wav_path = temp_wav.name
+            
+            try:
+                wave_file(temp_wav_path, audio_data, rate=24000)
+                # Convert to MP3
+                convert_audio_format(temp_wav_path, output_file)
+            finally:
+                if os.path.exists(temp_wav_path):
+                    os.remove(temp_wav_path)
         else:
-            with open(output_file, "wb") as f:
-                f.write(audio_data)
+            # WAV default
+            wave_file(output_file, audio_data, rate=24000)
 
     except Exception as e:
         snippet = text[:100] + "..." if len(text) > 100 else text

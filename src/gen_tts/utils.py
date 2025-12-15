@@ -61,3 +61,17 @@ def wave_file(filename, pcm, channels=1, rate=24000, sample_width=2):
       wf.setsampwidth(sample_width)
       wf.setframerate(rate)
       wf.writeframes(pcm)
+
+def convert_audio_format(input_file: str, output_file: str) -> None:
+    """Converts audio file format using ffmpeg."""
+    try:
+        subprocess.run(
+            ["ffmpeg", "-i", input_file, "-y", output_file],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    except FileNotFoundError:
+        raise RuntimeError("ffmpeg not found. Please install ffmpeg to support audio conversion.")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Error converting audio to {output_file}. Ensure ffmpeg is installed and working.") from e
