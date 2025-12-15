@@ -1,0 +1,68 @@
+[project]
+name = "gen-tts"
+version = "0.1.0"
+description = "Generate high-quality speech from text using Google Gemini's native Text-to-Speech (TTS) capabilities, including single and multi-speaker options."
+authors = [
+    { name = "Chuck Forsyth", email = "forsythc@ucr.edu" }
+]
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+keywords = ["gemini", "tts", "text-to-speech", "multi-speaker", "audio", "generation", "google-cloud"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Framework :: FastAPI",
+]
+
+dependencies = [
+    "python-dotenv>=1.0.0",
+    "google-generativeai>=0.8.0", # For Gemini API
+
+    "soundfile>=0.12.1", # If any audio processing/conversion is needed
+
+]
+
+[project.scripts]
+gen-tts = "gen_tts.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0", # For code coverage
+    "ruff>=0.1.0",
+    "uv>=0.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["gen_tts"]
+package-dir = { "" = "src" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+select = ["E", "F", "W", "I", "N", "D", "UP", "ANN", "ASYNC"]
+ignore = [
+    "D100", # Missing docstring in public module
+    "D104", # Missing docstring in public package
+    "D107", # Missing docstring in __init__
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "--cov=gen_tts --cov-report=term-missing --no-cov-on-fail"

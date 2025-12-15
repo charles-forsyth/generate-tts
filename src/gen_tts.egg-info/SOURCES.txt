@@ -1,0 +1,15 @@
+LICENSE
+README.md
+pyproject.toml
+src/gen_tts/__init__.py
+src/gen_tts/cli.py
+src/gen_tts/config.py
+src/gen_tts/core.py
+src/gen_tts/utils.py
+src/gen_tts.egg-info/PKG-INFO
+src/gen_tts.egg-info/SOURCES.txt
+src/gen_tts.egg-info/dependency_links.txt
+src/gen_tts.egg-info/entry_points.txt
+src/gen_tts.egg-info/requires.txt
+src/gen_tts.egg-info/top_level.txt
+tests/test_cli.py

@@ -1,0 +1,2 @@
+[console_scripts]
+gen-tts = gen_tts.cli:main
