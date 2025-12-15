@@ -1,18 +1,13 @@
 from typing import Optional, List, Dict, Any
 import sys
 import os
-import google.generativeai as genai
-from google.generativeai import GenerativeModel
-from google.api_core import exceptions
+from google import genai
+from google.genai import types
 from gen_tts.config import settings, USER_CONFIG_FILE
 from gen_tts.utils import wave_file
 
 def list_gemini_voices() -> List[str]:
     """Returns a list of available Gemini TTS voices."""
-    # This function is a placeholder as Gemini API currently does not expose
-    # a direct way to list prebuilt voice names via a client method.
-    # The voices are hardcoded based on the documentation provided.
-    # In a real scenario, if an API to list them existed, it would be used here.
     return [
         'Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda', 'Orus', 'Aoede',
         'Callirrhoe', 'Autonoe', 'Enceladus', 'Iapetus', 'Umbriel', 'Algieba',
@@ -30,53 +25,77 @@ def generate_speech_gemini(
     voice_name: Optional[str] = None,
     speaker_voices_map: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
-    """Generates speech from text using Google Gemini's native Text-to-Speech (TTS) capabilities."""
+    """Generates speech from text using the Google Gen AI SDK (V2)."""
     api_key = settings.google_api_key
     if not api_key:
         raise RuntimeError("GOOGLE_API_KEY not found. Please set it in .env.")
-    genai.configure(api_key=api_key)
+    
+    # Initialize the V2 Client
+    client = genai.Client(api_key=api_key)
 
-    gemini_model = GenerativeModel(model)
-
-    # Manually construct the generation_config dictionary
-    generation_config: Dict[str, Any] = {
-        "response_modalities": ["AUDIO"],
-        "speech_config": {}
-    }
-
+    # Build the SpeechConfig
+    speech_config = None
     if speaker_voices_map:
-        # speaker_voices_map is already a list of dicts from cli.py
-        generation_config["speech_config"]["multi_speaker_voice_config"] = {
-            "speaker_voice_configs": speaker_voices_map
-        }
+        # Map the list of dicts to a list of SpeakerVoiceConfig objects
+        # input dict structure: {'speaker': 'Name', 'voice_config': {'prebuilt_voice_config': {'voice_name': 'Name'}}}
+        speaker_configs = []
+        for sv in speaker_voices_map:
+            # We can construct the object directly from the dictionary if the keys match
+            # But let's be explicit to be safe.
+            voice_name_input = sv['voice_config']['prebuilt_voice_config']['voice_name']
+            speaker_name = sv['speaker']
+            
+            speaker_configs.append(
+                types.SpeakerVoiceConfig(
+                    speaker=speaker_name,
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name=voice_name_input
+                        )
+                    )
+                )
+            )
+
+        speech_config = types.SpeechConfig(
+            multi_speaker_voice_config=types.MultiSpeakerVoiceConfig(
+                speaker_voice_configs=speaker_configs
+            )
+        )
     elif voice_name:
-        generation_config["speech_config"]["voice_config"] = {
-            "prebuilt_voice_config": {
-                "voice_name": voice_name,
-            }
-        }
+        speech_config = types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name=voice_name,
+                )
+            )
+        )
     else:
         raise ValueError("Either voice_name or speaker_voices_map must be provided.")
 
     try:
-        response = gemini_model.generate_content(
+        response = client.models.generate_content(
+            model=model,
             contents=text,
-            generation_config=generation_config
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=speech_config
+            )
         )
 
+        # Accessing data in V2 SDK
+        # response.candidates[0].content.parts[0].inline_data.data
         if not response.candidates:
              raise RuntimeError(f"Gemini API returned no candidates. Full response: {response}")
 
         candidate = response.candidates[0]
         
-        # Check for unsuccessful finish reasons
-        if candidate.finish_reason != 1: # 1 is typically STOP/SUCCESS in the proto enum, but looking at the object is safer if we can map it. 
-                                         # The library usually exposes an enum. Let's rely on the string representation or just check content existence first.
-            # If there's no content, it's definitely an error
-            if not candidate.content or not candidate.content.parts:
-                 finish_reason_str = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(candidate.finish_reason)
-                 safety_ratings = getattr(candidate, 'safety_ratings', 'N/A')
-                 raise RuntimeError(f"Gemini API generation failed. Finish Reason: {finish_reason_str}. Safety Ratings: {safety_ratings}. Response: {response}")
+        # Check for unsuccessful finish reasons (V2 SDK usually handles this, but good to check)
+        # In V2, finish_reason is often an enum or string.
+        # We will check if content is present.
+        if not candidate.content or not candidate.content.parts:
+             finish_reason = getattr(candidate, 'finish_reason', 'UNKNOWN')
+             safety_ratings = getattr(candidate, 'safety_ratings', 'N/A')
+             raise RuntimeError(f"Gemini API generation failed. Finish Reason: {finish_reason}. Safety Ratings: {safety_ratings}. Response: {response}")
 
         try:
             audio_data = candidate.content.parts[0].inline_data.data
@@ -87,16 +106,11 @@ def generate_speech_gemini(
             raise RuntimeError("Gemini API returned empty audio data.")
         
         if audio_format.upper() == "WAV":
-            # Gemini typically returns raw PCM (LINEAR16) for audio generation.
-            # We must wrap it in a WAV container with the correct header.
-            # Defaulting to 24kHz as is common for Gemini TTS.
             wave_file(output_file, audio_data, rate=24000)
         else:
-            # For other formats (like MP3 if we were to support it natively via API config),
-            # or if we just want to save the raw bytes.
             with open(output_file, "wb") as f:
                 f.write(audio_data)
 
-    except exceptions.GoogleAPICallError as e:
+    except Exception as e:
         snippet = text[:100] + "..." if len(text) > 100 else text
         raise RuntimeError(f"Error during Gemini speech synthesis for prompt '{snippet}': {e}") from e
