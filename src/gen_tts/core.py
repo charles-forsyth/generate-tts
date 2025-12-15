@@ -64,8 +64,22 @@ def generate_speech_gemini(
             generation_config=generation_config
         )
 
+        if not response.candidates:
+             raise RuntimeError(f"Gemini API returned no candidates. Full response: {response}")
+
+        candidate = response.candidates[0]
+        
+        # Check for unsuccessful finish reasons
+        if candidate.finish_reason != 1: # 1 is typically STOP/SUCCESS in the proto enum, but looking at the object is safer if we can map it. 
+                                         # The library usually exposes an enum. Let's rely on the string representation or just check content existence first.
+            # If there's no content, it's definitely an error
+            if not candidate.content or not candidate.content.parts:
+                 finish_reason_str = candidate.finish_reason.name if hasattr(candidate.finish_reason, 'name') else str(candidate.finish_reason)
+                 safety_ratings = getattr(candidate, 'safety_ratings', 'N/A')
+                 raise RuntimeError(f"Gemini API generation failed. Finish Reason: {finish_reason_str}. Safety Ratings: {safety_ratings}. Response: {response}")
+
         try:
-            audio_data = response.candidates[0].content.parts[0].inline_data.data
+            audio_data = candidate.content.parts[0].inline_data.data
         except (AttributeError, IndexError) as e:
              raise RuntimeError(f"Unexpected response format from Gemini API: {response}") from e
 
