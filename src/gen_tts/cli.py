@@ -154,10 +154,10 @@ EXAMPLES:
     
     # Single speaker options
     voice_group.add_argument(
-        "--voice-name", type=str, default="Kore", metavar="NAME",
+        "--voice-name", type=str, default="Charon", metavar="NAME",
         help=(
             "The specific Gemini TTS voice name to use for single-speaker mode. "
-            "Default: 'Kore'. Use --list-voices to see all available options."
+            "Default: 'Charon'. Use --list-voices to see all available options."
         )
     )
 
@@ -170,7 +170,7 @@ EXAMPLES:
         "--speaker-voices", nargs='+', metavar="SPEAKER=VOICE_NAME",
         help=(
             "Define speaker names and their corresponding voice names for multi-speaker mode. "
-            "Example: 'Joe=Kore Jane=Puck'. Requires --multi-speaker."
+            "Example: 'Joe=Charon Jane=Puck'. Requires --multi-speaker."
         )
     )
 
@@ -220,10 +220,11 @@ EXAMPLES:
                 args.audio_format = "MP3"
         
         if args.summary:
-            # 1. Default Voice (Warm)
-            if args.voice_name == "Kore": # Check if it's still the default argparse value
-                print("Summary mode: Defaulting voice to 'Sulafat' (Warm).", file=sys.stderr)
-                args.voice_name = "Sulafat"
+            # 1. Default Voice
+            if args.voice_name == "Charon": # Check if it's the default argparse value
+                print("Summary mode: Defaulting voice to 'Charon'.", file=sys.stderr)
+                # It's already Charon by default, but we print for clarity or if we want to force it even if argparse changed
+                pass 
             
             # 2. Default Audio Format
             if args.audio_format == "WAV":
