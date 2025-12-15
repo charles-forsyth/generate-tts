@@ -4,7 +4,7 @@ import os
 import tempfile
 from typing import Optional, List, Dict, Any
 
-from gen_tts.core import generate_speech_gemini, list_gemini_voices, generate_transcript_gemini
+from gen_tts.core import generate_speech_gemini, list_gemini_voices, generate_transcript_gemini, generate_podcast_script
 from gen_tts.utils import create_filename, play_audio
 from gen_tts.config import settings, ensure_config_exists
 # Removed explicit imports of types components as they are constructed as dicts
@@ -46,10 +46,18 @@ EXAMPLES:
              --multi-speaker --speaker-voices Mario=Kore Luigi=Puck \
              --output-file pizza_debate.wav
 
-  4. Use a specific voice model for single speaker:
+  4. Create a podcast from a text file (Deep Dive style):
+     gen-tts --input-file article.txt --podcast \
+             --multi-speaker --speaker-voices Host=Kore Expert=Puck \
+             --audio-format MP3 --output-file deep_dive.mp3
+
+  5. Pipe text to create a podcast:
+     cat report.txt | gen-tts --podcast --multi-speaker --speaker-voices Host=Fenrir Guest=Leda
+
+  6. Use a specific voice model for single speaker:
      gen-tts "I have a specific voice." --voice-name Zephyr
 
-  5. Read text from a file and save as WAV (single speaker):
+  7. Read text from a file and save as WAV (single speaker):
      gen-tts --input-file script.txt --output-file output.wav --audio-format WAV --voice-name Kore
 """
     parser = argparse.ArgumentParser(
@@ -90,8 +98,12 @@ EXAMPLES:
         help="Generate a script for the TTS based on a topic using Gemini."
     )
     gen_group.add_argument(
-        "--transcript-model", type=str, default="gemini-2.0-flash",
-        help="The model to use for generating the transcript. Default: 'gemini-2.0-flash'."
+        "--podcast", action="store_true",
+        help="Convert input text/file into a multi-speaker podcast script before generating audio."
+    )
+    gen_group.add_argument(
+        "--transcript-model", type=str, default="gemini-2.5-pro",
+        help="The model to use for generating the transcript/podcast. Default: 'gemini-2.5-pro'."
     )
 
     # --- Output Arguments ---
@@ -191,15 +203,19 @@ EXAMPLES:
         detailed_prompt_content: Optional[str] = None
         
         # Conflict checks
+        if args.generate_transcript and args.podcast:
+            parser.error("--generate-transcript and --podcast cannot be used together. Choose one generation mode.")
+
+        # Input validation logic
         input_sources = sum(1 for x in [args.text, args.input_file, args.generate_transcript] if x)
-        if input_sources > 1:
-             parser.error("Please provide only one input source: text, --input-file, or --generate-transcript.")
         
-        # Piping check
-        if not sys.stdin.isatty() and (args.input_file or args.generate_transcript):
-             parser.error("Piping text is not allowed with --input-file or --generate-transcript.")
+        if args.input_file and args.text:
+            parser.error("argument --input-file: not allowed with a text argument.")
+        if args.input_file and not sys.stdin.isatty():
+             parser.error("--input-file: not allowed when piping text via stdin.")
+        # Note: We allow --podcast with pipe or file or text.
         
-        # Determine speakers FIRST for transcript generation
+        # Determine speakers FIRST
         speaker_voices_map: Optional[List[Dict[str, Any]]] = None
         speakers_list_for_gen = []
         
@@ -225,12 +241,15 @@ EXAMPLES:
         elif args.speaker_voices:
             parser.error("--speaker-voices can only be used with --multi-speaker.")
         else:
-            # Single speaker defaults
-            speakers_list_for_gen = ["Narrator"]
+            # Defaults
+            if args.podcast:
+                speakers_list_for_gen = ["Host", "Guest"]
+            else:
+                speakers_list_for_gen = ["Narrator"]
 
-        # Handle Input
+        # Handle Content Generation & Input Reading
         if args.generate_transcript:
-            print(f"Generating transcript for topic: '{args.generate_transcript}'...", file=sys.stderr)
+            print(f"Generating transcript for topic: '{args.generate_transcript}' using {args.transcript_model}...", file=sys.stderr)
             text_to_synthesize = generate_transcript_gemini(
                 topic=args.generate_transcript,
                 speakers=speakers_list_for_gen,
@@ -240,38 +259,53 @@ EXAMPLES:
             print(text_to_synthesize, file=sys.stderr)
             print("----------------------------\n", file=sys.stderr)
             
-        elif args.input_file:
-            with open(args.input_file, 'r') as f:
-                text_to_synthesize = f.read()
-        elif args.text:
-            text_to_synthesize = args.text
-        elif not sys.stdin.isatty():
-            text_to_synthesize = sys.stdin.read().strip()
+        else:
+            # Read input first (for normal TTS or Podcast source)
+            raw_input_text = ""
+            if args.input_file:
+                with open(args.input_file, 'r') as f:
+                    raw_input_text = f.read()
+            elif args.text:
+                raw_input_text = args.text
+            elif not sys.stdin.isatty():
+                raw_input_text = sys.stdin.read().strip()
+            
+            if not raw_input_text and not args.detailed_prompt_file:
+                 parser.error(
+                    "No input provided. Please provide text, --input-file, --generate-transcript, "
+                    "or pipe text to the script."
+                )
 
-        if not text_to_synthesize and not args.detailed_prompt_file:
-            parser.error(
-                "No input provided. Please provide text, --input-file, --generate-transcript, "
-                "or pipe text to the script."
-            )
-        
+            if args.podcast:
+                print(f"Generating podcast script from input content using {args.transcript_model}...", file=sys.stderr)
+                text_to_synthesize = generate_podcast_script(
+                    source_text=raw_input_text,
+                    speakers=speakers_list_for_gen,
+                    model=args.transcript_model
+                )
+                print("\n--- Generated Podcast Script ---", file=sys.stderr)
+                print(text_to_synthesize, file=sys.stderr)
+                print("--------------------------------\n", file=sys.stderr)
+            else:
+                text_to_synthesize = raw_input_text
+
+        # Detailed prompt handling
         if args.detailed_prompt_file:
             with open(args.detailed_prompt_file, 'r') as f:
                 detailed_prompt_content = f.read()
-            # If a detailed prompt is provided, the main text argument becomes the transcript part
-            # If no text is provided alongside a detailed prompt, the prompt should contain the transcript
             if text_to_synthesize:
                 detailed_prompt_content = detailed_prompt_content + "\n#### TRANSCRIPT\n" + text_to_synthesize
-            text_to_synthesize = detailed_prompt_content # The combined prompt becomes the content
+            text_to_synthesize = detailed_prompt_content
 
         if args.temp and args.no_play:
             parser.error("--temp cannot be used with --no-play.")
 
         # Multi-speaker prompt validation (only if NOT using detailed prompt file and NOT generated transcript which we know is safe-ish)
-        if args.multi_speaker and not args.detailed_prompt_file and not args.generate_transcript:
+        if args.multi_speaker and not args.detailed_prompt_file and not (args.generate_transcript or args.podcast):
             if not any(f"{s.get('speaker')}:" in text_to_synthesize for s in speaker_voices_map):
                  print("Warning: In multi-speaker mode without a detailed prompt, ensure your text is formatted as 'SpeakerName: Text' for proper voice assignment.", file=sys.stderr)
         
-        # Validate voice name for single speaker if not multi-speaker and not listing voices
+        # Validate voice name for single speaker
         if not args.multi_speaker and not args.list_voices:
             try:
                 all_gemini_voices = list_gemini_voices()
@@ -325,6 +359,3 @@ EXAMPLES:
     except KeyboardInterrupt:
         print("\nOperation cancelled by user. Exiting.", file=sys.stderr)
         sys.exit(0)
-
-if __name__ == "__main__":
-    main()

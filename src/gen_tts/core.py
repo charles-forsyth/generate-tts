@@ -63,6 +63,56 @@ def generate_transcript_gemini(
     except Exception as e:
          raise RuntimeError(f"Error generating transcript: {e}") from e
 
+def generate_podcast_script(
+    source_text: str,
+    speakers: List[str],
+    model: str = "gemini-2.0-flash"
+) -> str:
+    """Generates a podcast script from source text using Gemini."""
+    api_key = settings.google_api_key
+    if not api_key:
+        raise RuntimeError("GOOGLE_API_KEY not found. Please set it in .env.")
+    
+    client = genai.Client(api_key=api_key)
+
+    if not speakers:
+        speakers = ["Host", "Guest"]
+    
+    speakers_str = ", ".join(speakers)
+
+    prompt = (
+        f"You are a professional podcast producer. Your task is to turn the following source text into a "
+        f"lively, engaging, and insightful podcast conversation between two hosts: {speakers_str}.\n\n"
+        "Guidelines:\n"
+        "- Summarize the key points but also 'deep dive' into the most interesting or surprising details.\n"
+        "- The tone should be conversational, enthusiastic, and natural (like a 'Deep Dive' audio overview).\n"
+        "- Use analogies and clear explanations for complex topics.\n"
+        "- Maintain a dynamic flow between the speakers.\n"
+        "- STRICTLY follow the format: 'SpeakerName: Text'.\n"
+        "- Do NOT use markdown, stage directions, or parentheticals (e.g., (laughs)).\n"
+        "- Only output the dialogue lines.\n\n"
+        "Source Text:\n"
+        f"{source_text}\n"
+    )
+
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["TEXT"],
+                temperature=0.7,
+            )
+        )
+        
+        if not response.text:
+             raise RuntimeError("Gemini podcast generation returned empty text.")
+             
+        return response.text.strip()
+
+    except Exception as e:
+         raise RuntimeError(f"Error generating podcast script: {e}") from e
+
 def generate_speech_gemini(
     text: str,
     output_file: str,
