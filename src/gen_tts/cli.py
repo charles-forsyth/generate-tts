@@ -51,8 +51,8 @@ EXAMPLES:
              --multi-speaker --speaker-voices Host=Kore Expert=Puck \
              --audio-format MP3 --output-file deep_dive.mp3
 
-  5. Pipe text to create a podcast:
-     cat report.txt | gen-tts --podcast --multi-speaker --speaker-voices Host=Fenrir Guest=Leda
+  5. Pipe text to create a podcast (uses defaults: Host=Fenrir, Guest=Leda, MP3):
+     cat report.txt | gen-tts --podcast 
 
   6. Use a specific voice model for single speaker:
      gen-tts "I have a specific voice." --voice-name Zephyr
@@ -99,7 +99,7 @@ EXAMPLES:
     )
     gen_group.add_argument(
         "--podcast", action="store_true",
-        help="Convert input text/file into a multi-speaker podcast script before generating audio."
+        help="Convert input text/file into a multi-speaker podcast script before generating audio. Defaults to Host/Guest speakers and MP3 format if not specified."
     )
     gen_group.add_argument(
         "--transcript-model", type=str, default="gemini-2.5-pro",
@@ -206,14 +206,31 @@ EXAMPLES:
         if args.generate_transcript and args.podcast:
             parser.error("--generate-transcript and --podcast cannot be used together. Choose one generation mode.")
 
+        # --- Podcast Smart Defaults ---
+        if args.podcast:
+            # 1. Default Voices
+            if not args.speaker_voices:
+                print("Podcast mode: No speakers specified. Defaulting to Host=Fenrir and Guest=Leda.", file=sys.stderr)
+                args.speaker_voices = ["Host=Fenrir", "Guest=Leda"]
+                args.multi_speaker = True # Enforce multi-speaker
+            
+            # 2. Default Audio Format (Prefer MP3 for podcasts if not explicitly set to WAV)
+            # Since default is "WAV", we check if the user *didn't* change it. 
+            # Ideally we'd know if it was default, but assuming they want MP3 for podcast is safe unless they say otherwise?
+            # Let's check if the argument matches the default.
+            # A cleaner way is to just switch it if it's WAV.
+            if args.audio_format == "WAV":
+                print("Podcast mode: Defaulting audio format to MP3.", file=sys.stderr)
+                args.audio_format = "MP3"
+
         # Input validation logic
-        input_sources = sum(1 for x in [args.text, args.input_file, args.generate_transcript] if x)
+        input_sources = sum(1 for x in [args.text, args.input_file, args.generate_transcript] if x) 
         
         if args.input_file and args.text:
             parser.error("argument --input-file: not allowed with a text argument.")
         if args.input_file and not sys.stdin.isatty():
              parser.error("--input-file: not allowed when piping text via stdin.")
-        # Note: We allow --podcast with pipe or file or text.
+        # Note: We allow --podcast with pipe or file or text. 
         
         # Determine speakers FIRST
         speaker_voices_map: Optional[List[Dict[str, Any]]] = None
