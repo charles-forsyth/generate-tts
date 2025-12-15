@@ -102,7 +102,6 @@ def generate_speech_gemini(
                     )
                 )
             )
-        )
 
         speech_config = types.SpeechConfig(
             multi_speaker_voice_config=types.MultiSpeakerVoiceConfig(
