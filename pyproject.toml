@@ -1,6 +1,6 @@
 [project]
 name = "gen-tts"
-version = "0.1.10"
+version = "0.1.11"
 description = "Generate high-quality speech from text using Google Gemini's native Text-to-Speech (TTS) capabilities, including single and multi-speaker options."
 authors = [
     { name = "Chuck Forsyth", email = "forsythc@ucr.edu" }

@@ -113,6 +113,48 @@ def generate_podcast_script(
     except Exception as e:
          raise RuntimeError(f"Error generating podcast script: {e}") from e
 
+def generate_summary_script(
+    source_text: str,
+    model: str = "gemini-2.0-flash"
+) -> str:
+    """Generates a concise summary script from source text using Gemini."""
+    api_key = settings.google_api_key
+    if not api_key:
+        raise RuntimeError("GOOGLE_API_KEY not found. Please set it in .env.")
+    
+    client = genai.Client(api_key=api_key)
+
+    prompt = (
+        "You are an expert summarizer and voiceover writer. Your task is to condense the following source text "
+        "into a concise, information-packed summary suitable for audio delivery.\n\n"
+        "Guidelines:\n"
+        "- The tone should be warm, professional, and authoritative.\n"
+        "- Focus on the most critical information and key takeaways.\n"
+        "- Ensure the text flows naturally when read aloud.\n"
+        "- Do NOT use markdown, bullet points, or stage directions. Write in clear paragraphs.\n"
+        "- The output should be ready for a narrator to read immediately.\n\n"
+        "Source Text:\n"
+        f"{source_text}\n"
+    )
+
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["TEXT"],
+                temperature=0.5, # Lower temperature for accuracy and conciseness
+            )
+        )
+        
+        if not response.text:
+             raise RuntimeError("Gemini summary generation returned empty text.")
+             
+        return response.text.strip()
+
+    except Exception as e:
+         raise RuntimeError(f"Error generating summary script: {e}") from e
+
 def generate_speech_gemini(
     text: str,
     output_file: str,

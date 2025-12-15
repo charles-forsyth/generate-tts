@@ -4,7 +4,7 @@ import os
 import tempfile
 from typing import Optional, List, Dict, Any
 
-from gen_tts.core import generate_speech_gemini, list_gemini_voices, generate_transcript_gemini, generate_podcast_script
+from gen_tts.core import generate_speech_gemini, list_gemini_voices, generate_transcript_gemini, generate_podcast_script, generate_summary_script
 from gen_tts.utils import create_filename, play_audio
 from gen_tts.config import settings, ensure_config_exists
 # Removed explicit imports of types components as they are constructed as dicts
@@ -36,29 +36,24 @@ EXAMPLES:
   1. Generate and play a simple sentence (Preview mode - single speaker):
      gen-tts "Hello, world! This is a test." --temp --voice-name Kore
 
-  2. Save multi-speaker speech to a specific MP3 file:
+  2. Create a podcast from a text file (Deep Dive style):
+     gen-tts --input-file article.txt --podcast
+
+  3. Create a concise summary of a text file (Warm voice, info-packed):
+     gen-tts --input-file report.txt --summary
+
+  4. Pipe text to create a summary:
+     cat emails.txt | gen-tts --summary
+
+  5. Save multi-speaker speech to a specific MP3 file:
      gen-tts "Joe: How's it going today Jane?\nJane: Not too bad, how about you?" \
              --multi-speaker --speaker-voices Joe=Kore Jane=Puck \
              --output-file conversation.mp3
              
-  3. Generate a script and audio from a topic (AI writes the script):
+  6. Generate a script and audio from a topic:
      gen-tts --generate-transcript "A funny debate about pineapple on pizza" \
              --multi-speaker --speaker-voices Mario=Kore Luigi=Puck \
              --output-file pizza_debate.wav
-
-  4. Create a podcast from a text file (Deep Dive style):
-     gen-tts --input-file article.txt --podcast \
-             --multi-speaker --speaker-voices Host=Kore Expert=Puck \
-             --audio-format MP3 --output-file deep_dive.mp3
-
-  5. Pipe text to create a podcast (uses defaults: Host=Fenrir, Guest=Leda, MP3):
-     cat report.txt | gen-tts --podcast 
-
-  6. Use a specific voice model for single speaker:
-     gen-tts "I have a specific voice." --voice-name Zephyr
-
-  7. Read text from a file and save as WAV (single speaker):
-     gen-tts --input-file script.txt --output-file output.wav --audio-format WAV --voice-name Kore
 """
     parser = argparse.ArgumentParser(
         description=(
@@ -99,11 +94,15 @@ EXAMPLES:
     )
     gen_group.add_argument(
         "--podcast", action="store_true",
-        help="Convert input text/file into a multi-speaker podcast script before generating audio. Defaults to Host/Guest speakers and MP3 format if not specified."
+        help="Convert input into a multi-speaker podcast script. Defaults to Host/Guest speakers and MP3 format."
+    )
+    gen_group.add_argument(
+        "--summary", action="store_true",
+        help="Convert input into a concise, info-packed summary script. Defaults to 'Sulafat' (Warm) voice and MP3 format."
     )
     gen_group.add_argument(
         "--transcript-model", type=str, default="gemini-2.5-pro",
-        help="The model to use for generating the transcript/podcast. Default: 'gemini-2.5-pro'."
+        help="The model to use for generating the transcript/podcast/summary. Default: 'gemini-2.5-pro'."
     )
 
     # --- Output Arguments ---
@@ -203,34 +202,41 @@ EXAMPLES:
         detailed_prompt_content: Optional[str] = None
         
         # Conflict checks
-        if args.generate_transcript and args.podcast:
-            parser.error("--generate-transcript and --podcast cannot be used together. Choose one generation mode.")
+        modes = sum(1 for x in [args.generate_transcript, args.podcast, args.summary] if x)
+        if modes > 1:
+            parser.error("Choose only one generation mode: --generate-transcript, --podcast, or --summary.")
 
-        # --- Podcast Smart Defaults ---
+        # --- Smart Defaults ---
         if args.podcast:
             # 1. Default Voices
             if not args.speaker_voices:
                 print("Podcast mode: No speakers specified. Defaulting to Host=Fenrir and Guest=Leda.", file=sys.stderr)
                 args.speaker_voices = ["Host=Fenrir", "Guest=Leda"]
-                args.multi_speaker = True # Enforce multi-speaker
+                args.multi_speaker = True
             
-            # 2. Default Audio Format (Prefer MP3 for podcasts if not explicitly set to WAV)
-            # Since default is "WAV", we check if the user *didn't* change it. 
-            # Ideally we'd know if it was default, but assuming they want MP3 for podcast is safe unless they say otherwise?
-            # Let's check if the argument matches the default.
-            # A cleaner way is to just switch it if it's WAV.
+            # 2. Default Audio Format
             if args.audio_format == "WAV":
                 print("Podcast mode: Defaulting audio format to MP3.", file=sys.stderr)
                 args.audio_format = "MP3"
+        
+        if args.summary:
+            # 1. Default Voice (Warm)
+            if args.voice_name == "Kore": # Check if it's still the default argparse value
+                print("Summary mode: Defaulting voice to 'Sulafat' (Warm).", file=sys.stderr)
+                args.voice_name = "Sulafat"
+            
+            # 2. Default Audio Format
+            if args.audio_format == "WAV":
+                print("Summary mode: Defaulting audio format to MP3.", file=sys.stderr)
+                args.audio_format = "MP3"
 
         # Input validation logic
-        input_sources = sum(1 for x in [args.text, args.input_file, args.generate_transcript] if x) 
+        input_sources = sum(1 for x in [args.text, args.input_file, args.generate_transcript] if x)
         
         if args.input_file and args.text:
             parser.error("argument --input-file: not allowed with a text argument.")
         if args.input_file and not sys.stdin.isatty():
              parser.error("--input-file: not allowed when piping text via stdin.")
-        # Note: We allow --podcast with pipe or file or text. 
         
         # Determine speakers FIRST
         speaker_voices_map: Optional[List[Dict[str, Any]]] = None
@@ -303,6 +309,15 @@ EXAMPLES:
                 print("\n--- Generated Podcast Script ---", file=sys.stderr)
                 print(text_to_synthesize, file=sys.stderr)
                 print("--------------------------------\n", file=sys.stderr)
+            elif args.summary:
+                print(f"Generating summary from input content using {args.transcript_model}...", file=sys.stderr)
+                text_to_synthesize = generate_summary_script(
+                    source_text=raw_input_text,
+                    model=args.transcript_model
+                )
+                print("\n--- Generated Summary Script ---", file=sys.stderr)
+                print(text_to_synthesize, file=sys.stderr)
+                print("--------------------------------\n", file=sys.stderr)
             else:
                 text_to_synthesize = raw_input_text
 
@@ -317,7 +332,7 @@ EXAMPLES:
         if args.temp and args.no_play:
             parser.error("--temp cannot be used with --no-play.")
 
-        # Multi-speaker prompt validation (only if NOT using detailed prompt file and NOT generated transcript which we know is safe-ish)
+        # Multi-speaker prompt validation
         if args.multi_speaker and not args.detailed_prompt_file and not (args.generate_transcript or args.podcast):
             if not any(f"{s.get('speaker')}:" in text_to_synthesize for s in speaker_voices_map):
                  print("Warning: In multi-speaker mode without a detailed prompt, ensure your text is formatted as 'SpeakerName: Text' for proper voice assignment.", file=sys.stderr)
