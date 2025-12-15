@@ -1,171 +1,114 @@
-# Gen-TTS
+# Gen-TTS: Gemini Native Audio Generation CLI
 
-Gen-TTS is a powerful command-line interface (CLI) tool that leverages Google Gemini's native Text-to-Speech (TTS) capabilities to convert text into high-quality, natural-sounding audio. It supports both single-speaker and multi-speaker audio generation, offering fine-grained control over voice selection, style, accent, pace, and tone through advanced prompting techniques.
+`gen-tts` is a powerful command-line interface for Google's Gemini Native Text-to-Speech (TTS) capabilities. It allows you to generate high-quality, expressive speech from text, including single-speaker narration, multi-speaker conversations, and AI-generated podcasts and summaries.
+
+Powered by the **Gemini 2.5** and **Gemini 2.0** models.
 
 ## Features
 
-*   **Single-Speaker TTS**: Generate audio from text using a wide range of prebuilt Gemini voices.
-*   **Multi-Speaker TTS**: Create dynamic conversations with up to two distinct speakers, each with their own assigned voice.
-*   **Advanced Prompting**: Utilize detailed audio profiles, scene descriptions, and director's notes (via Markdown files) to guide the TTS model's performance for expressive and nuanced output.
-*   **Flexible Input**: Provide text directly as an argument, read from a file, or pipe content via standard input.
-*   **Multiple Output Formats**: Save generated audio in WAV or MP3 formats.
-*   **Temporary Playback**: Quickly preview generated speech without saving a permanent file.
-*   **Cross-Platform Audio Playback**: Automatically plays generated audio on macOS, Linux, and Windows.
-*   **Configurable**: Easily manage your Google API key and project ID through a `.env` file.
+-   **High-Quality Voices:** Access Gemini's full range of expressive voices (e.g., Charon, Kore, Fenrir, Puck).
+-   **Multi-Speaker Support:** Generate conversations between different speakers with distinct voices.
+-   **Podcast Mode:** Automatically turn any text or file into a lively "Deep Dive" podcast conversation between two hosts.
+-   **Summary Mode:** Summarize long text into a concise, information-packed audio briefing read by a warm, professional voice.
+-   **Transcript Generation:** Ask Gemini to write a script for you based on a topic, then immediately synthesize it.
+-   **MP3 Support:** Automatically converts output to MP3 (requires `ffmpeg`) or WAV.
+-   **Cross-Platform Playback:** Automatically plays the generated audio on Linux, macOS, and Windows.
 
 ## Installation
 
-1.  **Clone the repository (if applicable)**:
+### Prerequisites
+-   **Python 3.9+**
+-   **ffmpeg** (Required for MP3 support and playback on Linux)
+    -   *Linux:* `sudo apt install ffmpeg`
+    -   *macOS:* `brew install ffmpeg`
 
-    ```bash
-    git clone https://github.com/your-repo/gen-tts.git
-    cd gen-tts
-    ```
+### Install via uv (Recommended)
+```bash
+uv tool install git+https://github.com/charles-forsyth/generate-tts.git
+```
 
-2.  **Create a virtual environment and install dependencies**:
-
-    ```bash
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install --upgrade pip setuptools
-    pip install -e .
-    ```
-
-    For development dependencies:
-    ```bash
-    pip install -e .[dev]
-    ```
+### Install via pip
+```bash
+pip install git+https://github.com/charles-forsyth/generate-tts.git
+```
 
 ## Configuration
 
-Gen-TTS requires a Google Cloud API key for authentication with the Gemini API. Upon first run, if the configuration file doesn't exist, it will be created at `~/.config/gen-tts/.env`.
+The tool requires a Google Cloud API Key. On first run, it will create a config file at `~/.config/gen-tts/.env` where you can paste your key.
 
-1.  **Locate or Create `.env` file**: The script will guide you to create it if it doesn't exist. Alternatively, you can create it manually:
-
-    ```bash
-    mkdir -p ~/.config/gen-tts
-    touch ~/.config/gen-tts/.env
-    ```
-
-2.  **Add your Google Cloud API Key**: Open `~/.config/gen-tts/.env` and add your API key:
-
-    ```
-    # Google Cloud API Key (for Gemini TTS authentication)
-    GOOGLE_API_KEY='YOUR_GEMINI_API_KEY'
-
-    # Your Google Cloud Project ID (optional, but good practice)
-    GCLOUD_PROJECT='your-google-cloud-project-id'
-    ```
-    Replace `YOUR_GEMINI_API_KEY` with your actual Google Cloud API Key.
+```bash
+# ~/.config/gen-tts/.env
+GOOGLE_API_KEY="your_actual_api_key_here"
+```
 
 ## Usage
 
-### Basic Single-Speaker TTS
+### 1. Basic Single Speaker
+Generate audio from text. Default voice is **Charon** (Deep, Warm Male).
 
 ```bash
-gen-tts "The quick brown fox jumps over the lazy dog." --voice-name Zephyr --temp
+gen-tts "System systems operational." --temp
 ```
+*`--temp` plays the audio immediately without saving a file.*
 
-### Saving to a File
+### 2. Podcast Mode ("Deep Dive")
+Turn an article, report, or text into an engaging podcast conversation between two hosts (**Fenrir** and **Leda**).
 
 ```bash
-gen-tts "This is an important announcement." --voice-name Kore --output-file announcement.mp3 --audio-format MP3
+# From a file
+gen-tts --input-file article.txt --podcast --output-file deep_dive.mp3
+
+# Piping text
+echo "Breaking news..." | gen-tts --podcast
 ```
 
-### Multi-Speaker TTS
-
-For multi-speaker output, your input text should be formatted to indicate speakers (e.g., "SpeakerName: Text").
+### 3. Summary Mode
+Summarize text into a concise, professional audio briefing. Default voice is **Charon**.
 
 ```bash
-gen-tts "Joe: How's it going today Jane?\nJane: Not too bad, how about you?" \
-        --multi-speaker \
-        --speaker-voices Joe=Kore Jane=Puck \
-        --output-file conversation.wav
+cat report.txt | gen-tts --summary --output-file briefing.mp3
 ```
 
-### Using a Detailed Prompt (Audio Profile, Scene, Director's Notes)
-
-Create a Markdown file (e.g., `jaz_prompt.md`) with your detailed prompt:
-
-```markdown
-# AUDIO PROFILE: Jaz R.
-## "The Morning Hype"
-
-## THE SCENE: The London Studio
-It is 10:00 PM in a glass-walled studio overlooking the moonlit London skyline,
-but inside, it is blindingly bright. The red "ON AIR" tally light is blazing.
-Jaz is standing up, not sitting, bouncing on the balls of their heels to the
-rhythm of a thumping backing track. Their hands fly across the faders on a
-massive mixing desk. It is a chaotic, caffeine-fueled cockpit designed to wake
-up an entire nation.
-
-### DIRECTOR'S NOTES
-Style:
-* The "Vocal Smile": You must hear the grin in the audio. The soft palate is
-always raised to keep the tone bright, sunny, and explicitly inviting.
-* Dynamics: High projection without shouting. Punchy consonants and elongated
-vowels on excitement words (e.g., "Beauuutiful morning").
-
-Pace: Speaks at an energetic pace, keeping up with the fast music.  Speaks
-with A "bouncing" cadence. High-speed delivery with fluid transitions — no dead
-air, no gaps.
-
-Accent: Jaz is from Brixton, London
-
-### SAMPLE CONTEXT
-Jaz is the industry standard for Top 40 radio, high-octane event promos, or any
-script that requires a charismatic Estuary accent and 11/10 infectious energy.
-
-#### TRANSCRIPT
-Yes, massive vibes in the studio! You are locked in and it is absolutely
-popping off in London right now. If you're stuck on the tube, or just sat
-there pretending to work... stop it. Seriously, I see you. Turn this up!
-We've got the project roadmap landing in three, two... let's go!
-```
-
-Then run:
+### 4. Topic-Based Generation
+Ask Gemini to write a script for you and then speak it.
 
 ```bash
-gen-tts --detailed-prompt-file jaz_prompt.md --output-file jaz_radio.mp3
+gen-tts --generate-transcript "A funny debate about coffee vs tea" \
+        --multi-speaker --speaker-voices Alice=Kore Bob=Puck \
+        --output-file debate.mp3
 ```
 
-### Listing Available Voices
+### 5. Custom Multi-Speaker
+Provide your own script formatted as `Speaker: Text`.
 
+**script.txt:**
+```text
+Joe: Hey Jane, did you see the update?
+Jane: Yes, it looks amazing!
+```
+
+**Command:**
 ```bash
-gen-tts --list-voices
+gen-tts --input-file script.txt --multi-speaker \
+        --speaker-voices Joe=Charon Jane=Puck \
+        --audio-format MP3
 ```
 
-### Piped Input
+### Options Reference
 
-```bash
-cat my_script.txt | gen-tts --temp --voice-name Puck
-```
-
-## Development
-
-### Running Tests
-
-```bash
-source .venv/bin/activate
-pytest
-```
-
-### Linting and Formatting
-
-```bash
-source .venv/bin/activate
-ruff check .
-ruff format .
-```
+| Flag | Description |
+| :--- | :--- |
+| `--podcast` | Generate a multi-speaker podcast script from input. |
+| `--summary` | Generate a concise summary script from input. |
+| `--generate-transcript "TOPIC"` | Generate a script based on a topic. |
+| `--multi-speaker` | Enable multi-speaker mode (requires `--speaker-voices`). |
+| `--speaker-voices` | Map speakers to voices (e.g., `Host=Fenrir Guest=Leda`). |
+| `--voice-name` | Voice for single-speaker mode (Default: `Charon`). |
+| `--audio-format` | `WAV` or `MP3`. Defaults to `MP3` for podcasts/summaries. |
+| `--model` | TTS Model (Default: `gemini-2.5-flash-preview-tts`). |
+| `--transcript-model` | Model for script generation (Default: `gemini-2.5-pro`). |
+| `--list-voices` | List all available Gemini voices. |
+| `--no-play` | Disable automatic playback. |
 
 ## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-## Support
-
-If you encounter any issues or have questions, please open an issue on the [GitHub repository](https://github.com/your-repo/gen-tts/issues).
+MIT License

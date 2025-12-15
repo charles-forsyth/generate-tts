@@ -33,27 +33,41 @@ def main():
     epilog_examples = """
 EXAMPLES:
 
-  1. Generate and play a simple sentence (Preview mode - single speaker):
-     gen-tts "Hello, world! This is a test." --temp --voice-name Kore
+  1. Quick Single Speaker (Default: Charon, WAV):
+     gen-tts "System systems operational." --temp
 
-  2. Create a podcast from a text file (Deep Dive style):
-     gen-tts --input-file article.txt --podcast
+  2. Generate a Podcast ("Deep Dive" style):
+     # Turns text into a lively conversation between two hosts (Fenrir & Leda)
+     # Automatically defaults to MP3 format.
+     gen-tts --input-file article.txt --podcast --output-file deep_dive.mp3
 
-  3. Create a concise summary of a text file (Warm voice, info-packed):
-     gen-tts --input-file report.txt --summary
+  3. Generate a Concise Summary:
+     # Summarizes input into a warm, professional reading (Default: Charon, MP3)
+     cat report.txt | gen-tts --summary --output-file briefing.mp3
 
-  4. Pipe text to create a summary:
-     cat emails.txt | gen-tts --summary
+  4. Generate Audio from a Topic (AI writes the script):
+     gen-tts --generate-transcript "A debate about the future of AI" \
+             --multi-speaker --speaker-voices Optimist=Kore Skeptic=Puck \
+             --audio-format MP3 --output-file debate.mp3
 
-  5. Save multi-speaker speech to a specific MP3 file:
-     gen-tts "Joe: How's it going today Jane?\nJane: Not too bad, how about you?" \
-             --multi-speaker --speaker-voices Joe=Kore Jane=Puck \
-             --output-file conversation.mp3
-             
-  6. Generate a script and audio from a topic:
-     gen-tts --generate-transcript "A funny debate about pineapple on pizza" \
-             --multi-speaker --speaker-voices Mario=Kore Luigi=Puck \
-             --output-file pizza_debate.wav
+  5. Custom Multi-Speaker Conversation:
+     # You provide the script file formatted as 'Speaker: Text'
+     gen-tts --input-file script.txt --multi-speaker \
+             --speaker-voices Host=Fenrir Guest=Leda \
+             --audio-format MP3
+
+  6. Pipe Text to Podcast:
+     echo "This is a breaking news story..." | gen-tts --podcast --no-play
+
+  7. List Available Voices:
+     gen-tts --list-voices
+
+CONFIGURATION:
+  To authenticate with Google Cloud, set your API key in a .env file:
+  $ echo "GOOGLE_API_KEY=AIzaSy...YourAPIKey..." >> .env
+  $ echo "GCLOUD_PROJECT=your-google-cloud-project-id" >> .env
+
+For more details, visit: https://github.com/charles-forsyth/generate-tts
 """
     parser = argparse.ArgumentParser(
         description=(
