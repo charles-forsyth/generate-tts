@@ -5,6 +5,7 @@ import google.generativeai as genai
 from google.generativeai import GenerativeModel
 from google.api_core import exceptions
 from gen_tts.config import settings, USER_CONFIG_FILE
+from gen_tts.utils import wave_file
 
 def list_gemini_voices() -> List[str]:
     """Returns a list of available Gemini TTS voices."""
@@ -27,7 +28,7 @@ def generate_speech_gemini(
     audio_format: str,
     project_id: Optional[str] = None,
     voice_name: Optional[str] = None,
-    speaker_voices_map: Optional[List[Dict[str, Any]]] = None, # Change type hint to Dict[str, Any]
+    speaker_voices_map: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     """Generates speech from text using Google Gemini's native Text-to-Speech (TTS) capabilities."""
     api_key = settings.google_api_key
@@ -63,10 +64,24 @@ def generate_speech_gemini(
             generation_config=generation_config
         )
 
-        audio_data = response.candidates[0].content.parts[0].inline_data.data
+        try:
+            audio_data = response.candidates[0].content.parts[0].inline_data.data
+        except (AttributeError, IndexError) as e:
+             raise RuntimeError(f"Unexpected response format from Gemini API: {response}") from e
+
+        if not audio_data:
+            raise RuntimeError("Gemini API returned empty audio data.")
         
-        with open(output_file, "wb") as f:
-            f.write(audio_data)
+        if audio_format.upper() == "WAV":
+            # Gemini typically returns raw PCM (LINEAR16) for audio generation.
+            # We must wrap it in a WAV container with the correct header.
+            # Defaulting to 24kHz as is common for Gemini TTS.
+            wave_file(output_file, audio_data, rate=24000)
+        else:
+            # For other formats (like MP3 if we were to support it natively via API config),
+            # or if we just want to save the raw bytes.
+            with open(output_file, "wb") as f:
+                f.write(audio_data)
 
     except exceptions.GoogleAPICallError as e:
         snippet = text[:100] + "..." if len(text) > 100 else text
