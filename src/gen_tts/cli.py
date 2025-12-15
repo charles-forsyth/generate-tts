@@ -4,7 +4,7 @@ import os
 import tempfile
 from typing import Optional, List, Dict, Any
 
-from gen_tts.core import generate_speech_gemini, list_gemini_voices
+from gen_tts.core import generate_speech_gemini, list_gemini_voices, generate_transcript_gemini
 from gen_tts.utils import create_filename, play_audio
 from gen_tts.config import settings, ensure_config_exists
 # Removed explicit imports of types components as they are constructed as dicts
@@ -40,37 +40,17 @@ EXAMPLES:
      gen-tts "Joe: How's it going today Jane?\nJane: Not too bad, how about you?" \
              --multi-speaker --speaker-voices Joe=Kore Jane=Puck \
              --output-file conversation.mp3
+             
+  3. Generate a script and audio from a topic (AI writes the script):
+     gen-tts --generate-transcript "A funny debate about pineapple on pizza" \
+             --multi-speaker --speaker-voices Mario=Kore Luigi=Puck \
+             --output-file pizza_debate.wav
 
-  3. Use a specific voice model for single speaker:
+  4. Use a specific voice model for single speaker:
      gen-tts "I have a specific voice." --voice-name Zephyr
 
-  4. Read text from a file and save as WAV (single speaker):
+  5. Read text from a file and save as WAV (single speaker):
      gen-tts --input-file script.txt --output-file output.wav --audio-format WAV --voice-name Kore
-
-  5. Pipe text from another command (single speaker):
-     echo "System update complete." | gen-tts --temp --voice-name Kore
-
-  6. List all available Gemini TTS voices:
-     gen-tts --list-voices
-
-  7. Generate speech with a detailed prompt (single speaker):
-     gen-tts "Yes, massive vibes in the studio!" \
-             --detailed-prompt-file detailed_prompt.md \
-             --output-file jaz_radio.mp3
-
-  8. Generate multi-speaker speech with a detailed prompt:
-     gen-tts --input-file podcast_transcript.txt \
-             --multi-speaker --speaker-voices Dr.Anya=Kore Liam=Puck \
-             --detailed-prompt-file podcast_director_notes.md \
-             --output-file podcast.mp3
-
-CONFIGURATION:
-  To authenticate with Google Cloud, set your API key in a .env file:
-  $ echo "GOOGLE_API_KEY=AIzaSy...YourAPIKey..." >> .env
-  $ echo "GCLOUD_PROJECT=your-google-cloud-project-id" >> .env
-  # Or use an existing Google Cloud credential setup
-
-For more details, visit: [Your Project Repo Here]
 """
     parser = argparse.ArgumentParser(
         description=(
@@ -83,12 +63,12 @@ For more details, visit: [Your Project Repo Here]
     )
 
     # --- Input Arguments ---
-    input_group = parser.add_argument_group('Input Options (provide one of text, --input-file or piped data)')
+    input_group = parser.add_argument_group('Input Options (provide one of text, --input-file, --generate-transcript or piped data)')
     input_group.add_argument(
         "text", nargs="?", type=str, default=None,
         help=(
-            "The text to synthesize. Optional if using --input-file or piping "
-            "text via stdin. For multi-speaker, format as 'SpeakerName: Text'."
+            "The text to synthesize. Optional if using --input-file, --generate-transcript, "
+            "or piping text via stdin."
         )
     )
     input_group.add_argument(
@@ -101,6 +81,17 @@ For more details, visit: [Your Project Repo Here]
             "Path to a Markdown file containing a detailed prompt "
             "(Audio Profile, Scene, Director's Notes) for advanced TTS control."
         )
+    )
+    
+    # --- Generation Arguments ---
+    gen_group = parser.add_argument_group('Content Generation Options')
+    gen_group.add_argument(
+        "--generate-transcript", type=str, metavar="TOPIC",
+        help="Generate a script for the TTS based on a topic using Gemini."
+    )
+    gen_group.add_argument(
+        "--transcript-model", type=str, default="gemini-2.0-flash",
+        help="The model to use for generating the transcript. Default: 'gemini-2.0-flash'."
     )
 
     # --- Output Arguments ---
@@ -198,15 +189,58 @@ For more details, visit: [Your Project Repo Here]
 
         text_to_synthesize = ""
         detailed_prompt_content: Optional[str] = None
+        
+        # Conflict checks
+        input_sources = sum(1 for x in [args.text, args.input_file, args.generate_transcript] if x)
+        if input_sources > 1:
+             parser.error("Please provide only one input source: text, --input-file, or --generate-transcript.")
+        
+        # Piping check
+        if not sys.stdin.isatty() and (args.input_file or args.generate_transcript):
+             parser.error("Piping text is not allowed with --input-file or --generate-transcript.")
+        
+        # Determine speakers FIRST for transcript generation
+        speaker_voices_map: Optional[List[Dict[str, Any]]] = None
+        speakers_list_for_gen = []
+        
+        if args.multi_speaker:
+            if not args.speaker_voices:
+                parser.error("--multi-speaker requires --speaker-voices.")
+            
+            speaker_voices_map = []
+            for sv_pair in args.speaker_voices:
+                if '=' not in sv_pair:
+                    parser.error(f"Invalid --speaker-voices format: {sv_pair}. Expected SPEAKER=VOICE_NAME.")
+                speaker, voice_name = sv_pair.split('=', 1)
+                speakers_list_for_gen.append(speaker)
+                # Construct as dictionary directly
+                speaker_voices_map.append({
+                    "speaker": speaker,
+                    "voice_config": {
+                        "prebuilt_voice_config": {
+                            "voice_name": voice_name,
+                        }
+                    }
+                })
+        elif args.speaker_voices:
+            parser.error("--speaker-voices can only be used with --multi-speaker.")
+        else:
+            # Single speaker defaults
+            speakers_list_for_gen = ["Narrator"]
 
-        if args.input_file and args.text:
-            parser.error("argument --input-file: not allowed with a text argument.")
-        if args.input_file and not sys.stdin.isatty():
-             parser.error("--input-file: not allowed when piping text via stdin.")
-        if args.text and not sys.stdin.isatty():
-             parser.error("text argument: not allowed when piping text via stdin.")
-
-        if args.input_file:
+        # Handle Input
+        if args.generate_transcript:
+            print(f"Generating transcript for topic: '{args.generate_transcript}'...", file=sys.stderr)
+            text_to_synthesize = generate_transcript_gemini(
+                topic=args.generate_transcript,
+                speakers=speakers_list_for_gen,
+                model=args.transcript_model
+            )
+            print("\n--- Generated Transcript ---", file=sys.stderr)
+            print(text_to_synthesize, file=sys.stderr)
+            print("----------------------------\n", file=sys.stderr)
+            
+        elif args.input_file:
             with open(args.input_file, 'r') as f:
                 text_to_synthesize = f.read()
         elif args.text:
@@ -216,9 +250,8 @@ For more details, visit: [Your Project Repo Here]
 
         if not text_to_synthesize and not args.detailed_prompt_file:
             parser.error(
-                "No input provided. Please provide text as an argument, use "
-                "--input-file, pipe text to the script, or specify "
-                "--detailed-prompt-file."
+                "No input provided. Please provide text, --input-file, --generate-transcript, "
+                "or pipe text to the script."
             )
         
         if args.detailed_prompt_file:
@@ -233,32 +266,10 @@ For more details, visit: [Your Project Repo Here]
         if args.temp and args.no_play:
             parser.error("--temp cannot be used with --no-play.")
 
-        speaker_voices_map: Optional[List[Dict[str, Any]]] = None # Changed type hint
-        if args.multi_speaker:
-            if not args.speaker_voices:
-                parser.error("--multi-speaker requires --speaker-voices.")
-            
-            speaker_voices_map = []
-            for sv_pair in args.speaker_voices:
-                if '=' not in sv_pair:
-                    parser.error(f"Invalid --speaker-voices format: {sv_pair}. Expected SPEAKER=VOICE_NAME.")
-                speaker, voice_name = sv_pair.split('=', 1)
-                # Construct as dictionary directly
-                speaker_voices_map.append({
-                    "speaker": speaker,
-                    "voice_config": {
-                        "prebuilt_voice_config": {
-                            "voice_name": voice_name,
-                        }
-                    }
-                })
-            
-            # For multi-speaker, ensure the prompt content implicitly defines speakers if no detailed prompt.
-            # If a detailed prompt file is used, it's assumed to handle this.
-            if not detailed_prompt_content and not any(f"{s.get('speaker')}:" in text_to_synthesize for s in speaker_voices_map):
+        # Multi-speaker prompt validation (only if NOT using detailed prompt file and NOT generated transcript which we know is safe-ish)
+        if args.multi_speaker and not args.detailed_prompt_file and not args.generate_transcript:
+            if not any(f"{s.get('speaker')}:" in text_to_synthesize for s in speaker_voices_map):
                  print("Warning: In multi-speaker mode without a detailed prompt, ensure your text is formatted as 'SpeakerName: Text' for proper voice assignment.", file=sys.stderr)
-        elif args.speaker_voices:
-            parser.error("--speaker-voices can only be used with --multi-speaker.")
         
         # Validate voice name for single speaker if not multi-speaker and not listing voices
         if not args.multi_speaker and not args.list_voices:

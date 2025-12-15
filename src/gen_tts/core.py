@@ -16,6 +16,52 @@ def list_gemini_voices() -> List[str]:
         'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat'
     ]
 
+def generate_transcript_gemini(
+    topic: str,
+    speakers: List[str],
+    model: str = "gemini-2.0-flash"
+) -> str:
+    """Generates a conversation transcript using Gemini, formatted for TTS."""
+    api_key = settings.google_api_key
+    if not api_key:
+        raise RuntimeError("GOOGLE_API_KEY not found. Please set it in .env.")
+    
+    client = genai.Client(api_key=api_key)
+
+    if not speakers:
+        # Default for single speaker or unspecified
+        speakers = ["Narrator"]
+
+    speakers_str = ", ".join(speakers)
+    
+    prompt = (
+        f"Write a script for a conversation between {speakers_str} about the following topic:\n"
+        f"Topic: {topic}\n\n"
+        "Formatting Requirements:\n"
+        "1. Strictly follow the format: 'SpeakerName: Text'.\n"
+        "2. Do not include any markdown, bolding, scene descriptions, or parenthetical actions (e.g., (laughs)).\n"
+        "3. Only output the dialogue lines.\n"
+        "4. Ensure the speaker names match exactly as provided.\n"
+    )
+
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["TEXT"],
+                temperature=0.7, # slightly creative but controlled
+            )
+        )
+        
+        if not response.text:
+             raise RuntimeError("Gemini transcript generation returned empty text.")
+             
+        return response.text.strip()
+
+    except Exception as e:
+         raise RuntimeError(f"Error generating transcript: {e}") from e
+
 def generate_speech_gemini(
     text: str,
     output_file: str,
