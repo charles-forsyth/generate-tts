@@ -25,8 +25,10 @@ def play_audio(filename: str) -> None:
         if system == "Darwin":  # macOS
             subprocess.run(["afplay", filename], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         elif system == "Linux":  # Linux
-            # Prioritize play from sox, then paplay, then aplay
-            if os.system("which play > /dev/null") == 0:
+            # Prioritize ffplay (from ffmpeg), then play (sox), then paplay, then aplay
+            if os.system("which ffplay > /dev/null") == 0:
+                subprocess.run(["ffplay", "-nodisp", "-autoexit", filename], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            elif os.system("which play > /dev/null") == 0:
                 subprocess.run(["play", filename], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif os.system("which paplay > /dev/null") == 0:
                 subprocess.run(["paplay", filename], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -34,7 +36,7 @@ def play_audio(filename: str) -> None:
                 subprocess.run(["aplay", filename], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
                 print(
-                    "Warning: No suitable audio player found (play, paplay, aplay). "
+                    "Warning: No suitable audio player found (ffplay, play, paplay, aplay). "
                     "Please install one to enable audio playback.",
                     file=sys.stderr
                 )
