@@ -37,7 +37,7 @@ EXAMPLES:
      gen-tts "System systems operational." --temp
 
   2. Generate a Podcast ("Deep Dive" style):
-     # Turns text into a lively conversation between two hosts (Fenrir & Leda)
+     # Turns text into a lively conversation between two hosts (Charon & Kore)
      # Automatically defaults to MP3 format.
      gen-tts --input-file article.txt --podcast --output-file deep_dive.mp3
 
@@ -53,7 +53,7 @@ EXAMPLES:
   5. Custom Multi-Speaker Conversation:
      # You provide the script file formatted as 'Speaker: Text'
      gen-tts --input-file script.txt --multi-speaker \
-             --speaker-voices Host=Fenrir Guest=Leda \
+             --speaker-voices Host=Charon Guest=Kore \
              --audio-format MP3
 
   6. Pipe Text to Podcast:
@@ -224,8 +224,8 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
         if args.podcast:
             # 1. Default Voices
             if not args.speaker_voices:
-                print("Podcast mode: No speakers specified. Defaulting to Host=Fenrir and Guest=Leda.", file=sys.stderr)
-                args.speaker_voices = ["Host=Fenrir", "Guest=Leda"]
+                print("Podcast mode: No speakers specified. Defaulting to Host=Charon and Guest=Kore.", file=sys.stderr)
+                args.speaker_voices = ["Host=Charon", "Guest=Kore"]
                 args.multi_speaker = True
             
             # 2. Default Audio Format
