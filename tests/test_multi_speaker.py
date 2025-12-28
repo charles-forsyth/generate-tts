@@ -1,9 +1,14 @@
-import subprocess
 import os
+import subprocess
 
-def test_multi_speaker():
-    script = "Joe: Hey Jane, did you see the new update?\nJane: Yes Joe, it looks amazing! The voice quality is incredible."
-    
+
+def test_multi_speaker() -> None:
+    """Test the multi-speaker generation capability."""
+    script = (
+        "Joe: Hey Jane, did you see the new update?\n"
+        "Jane: Yes Joe, it looks amazing! The voice quality is incredible."
+    )
+
     cmd = [
         "gen-tts",
         script,
@@ -12,9 +17,9 @@ def test_multi_speaker():
         "--output-file", "multi_speaker_test.wav",
         "--no-play"
     ]
-    
+
     print(f"Running command: {' '.join(cmd)}")
-    
+
     try:
         subprocess.run(cmd, check=True)
         if os.path.exists("multi_speaker_test.wav"):

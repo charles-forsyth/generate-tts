@@ -1,16 +1,22 @@
 import argparse
 import sys
-import os
 import tempfile
-from typing import Optional, List, Dict, Any
+from typing import Any, Optional
 
-from gen_tts.core import generate_speech_gemini, list_gemini_voices, generate_transcript_gemini, generate_podcast_script, generate_summary_script
+from gen_tts.config import ensure_config_exists, settings
+from gen_tts.core import (
+    SCRIPT_STYLES,
+    generate_speech_gemini,
+    generate_styled_script,
+    generate_transcript_gemini,
+    list_gemini_voices,
+)
 from gen_tts.utils import create_filename, play_audio
-from gen_tts.config import settings, ensure_config_exists
+
 # Removed explicit imports of types components as they are constructed as dicts
 
-def list_voices_table(voice_list: List[str]):
-    """Prints the available voices in a formatted table."""
+def list_voices_table(voice_list: list[str]) -> None:
+    """Print the available voices in a formatted table."""
     if not voice_list:
         print("No Gemini TTS voices could be fetched.", file=sys.stderr)
         return
@@ -24,9 +30,8 @@ def list_voices_table(voice_list: List[str]):
     for voice_name in voice_list:
         print(f"{voice_name:<{max_name_len}}")
 
-def main():
-    """Parses command-line arguments and calls the voice generation function."""
-    
+def main() -> None:
+    """Parse command-line arguments and call the voice generation function."""
     # Ensure config exists and permissions are secure
     ensure_config_exists()
 
@@ -37,30 +42,26 @@ EXAMPLES:
      gen-tts "System systems operational." --temp
 
   2. Generate a Podcast ("Deep Dive" style):
-     # Turns text into a lively conversation between two hosts (Charon & Kore)
-     # Automatically defaults to MP3 format.
-     gen-tts --input-file article.txt --podcast --output-file deep_dive.mp3
+     # Turns text into a lively conversation between two hosts
+     gen-tts --input-file article.txt --mode podcast --output-file deep_dive.mp3
 
   3. Generate a Concise Summary:
-     # Summarizes input into a warm, professional reading (Default: Charon, MP3)
-     cat report.txt | gen-tts --summary --output-file briefing.mp3
+     # Summarizes input into a warm, professional reading
+     cat report.txt | gen-tts --mode summary --output-file briefing.mp3
 
-  4. Generate Audio from a Topic (AI writes the script):
-     gen-tts --generate-transcript "A debate about the future of AI" \
-             --multi-speaker --speaker-voices Optimist=Kore Skeptic=Puck \
+  4. Generate a Debate:
+     gen-tts --input-file topic.txt --mode debate --temp
+
+  5. Generate Audio from a Topic (AI writes the script):
+     gen-tts --generate-transcript "A debate about the future of AI" \\
+             --multi-speaker --speaker-voices Optimist=Kore Skeptic=Puck \\
              --audio-format MP3 --output-file debate.mp3
 
-  5. Custom Multi-Speaker Conversation:
+  6. Custom Multi-Speaker Conversation:
      # You provide the script file formatted as 'Speaker: Text'
-     gen-tts --input-file script.txt --multi-speaker \
-             --speaker-voices Host=Charon Guest=Kore \
+     gen-tts --input-file script.txt --multi-speaker \\
+             --speaker-voices Host=Charon Guest=Kore \\
              --audio-format MP3
-
-  6. Pipe Text to Podcast:
-     echo "This is a breaking news story..." | gen-tts --podcast --no-play
-
-  7. List Available Voices:
-     gen-tts --list-voices
 
 CONFIGURATION:
   To authenticate with Google Cloud, set your API key in a .env file:
@@ -80,7 +81,9 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
     )
 
     # --- Input Arguments ---
-    input_group = parser.add_argument_group('Input Options (provide one of text, --input-file, --generate-transcript or piped data)')
+    input_group = parser.add_argument_group(
+        'Input Options (provide one of text, --input-file, --generate-transcript or piped data)'
+    )
     input_group.add_argument(
         "text", nargs="?", type=str, default=None,
         help=(
@@ -99,7 +102,7 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
             "(Audio Profile, Scene, Director's Notes) for advanced TTS control."
         )
     )
-    
+
     # --- Generation Arguments ---
     gen_group = parser.add_argument_group('Content Generation Options')
     gen_group.add_argument(
@@ -107,16 +110,23 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
         help="Generate a script for the TTS based on a topic using Gemini."
     )
     gen_group.add_argument(
+        "--mode", type=str, choices=list(SCRIPT_STYLES.keys()),
+        help=(
+            "Transform input text into a specific style (podcast, summary, "
+            "interview, storyteller, news, debate, lecture)."
+        )
+    )
+    gen_group.add_argument(
         "--podcast", action="store_true",
-        help="Convert input into a multi-speaker podcast script. Defaults to Host/Guest speakers and MP3 format."
+        help="Alias for --mode podcast. Convert input into a multi-speaker podcast."
     )
     gen_group.add_argument(
         "--summary", action="store_true",
-        help="Convert input into a concise, info-packed summary script. Defaults to 'Sulafat' (Warm) voice and MP3 format."
+        help="Alias for --mode summary. Convert input into a concise summary."
     )
     gen_group.add_argument(
         "--transcript-model", type=str, default="gemini-2.5-pro",
-        help="The model to use for generating the transcript/podcast/summary. Default: 'gemini-2.5-pro'."
+        help="The model to use for generating the transcript/script. Default: 'gemini-2.5-pro'."
     )
 
     # --- Output Arguments ---
@@ -165,7 +175,7 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
         "--list-voices", action="store_true",
         help="List all available Gemini TTS voices and exit."
     )
-    
+
     # Single speaker options
     voice_group.add_argument(
         "--voice-name", type=str, default="Charon", metavar="NAME",
@@ -214,60 +224,97 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
 
         text_to_synthesize = ""
         detailed_prompt_content: Optional[str] = None
-        
-        # Conflict checks
-        modes = sum(1 for x in [args.generate_transcript, args.podcast, args.summary] if x)
-        if modes > 1:
-            parser.error("Choose only one generation mode: --generate-transcript, --podcast, or --summary.")
 
-        # --- Smart Defaults ---
+        # Resolve aliases
         if args.podcast:
-            # 1. Default Voices
-            if not args.speaker_voices:
-                print("Podcast mode: No speakers specified. Defaulting to Host=Charon and Guest=Kore.", file=sys.stderr)
-                args.speaker_voices = ["Host=Charon", "Guest=Kore"]
-                args.multi_speaker = True
-            
-            # 2. Default Audio Format
-            if args.audio_format == "WAV":
-                print("Podcast mode: Defaulting audio format to MP3.", file=sys.stderr)
-                args.audio_format = "MP3"
-        
+            if args.mode and args.mode != "podcast":
+                parser.error("Conflicting modes selected: --podcast and --mode")
+            args.mode = "podcast"
         if args.summary:
-            # 1. Default Voice
-            if args.voice_name == "Charon": # Check if it's the default argparse value
-                print("Summary mode: Defaulting voice to 'Charon'.", file=sys.stderr)
-                # It's already Charon by default, but we print for clarity or if we want to force it even if argparse changed
-                pass 
-            
-            # 2. Default Audio Format
+            if args.mode and args.mode != "summary":
+                parser.error("Conflicting modes selected: --summary and --mode")
+            args.mode = "summary"
+
+        # Conflict checks
+        if args.generate_transcript and args.mode:
+             parser.error(
+                 "Choose only one generation method: "
+                 "--generate-transcript or --mode/--podcast/--summary."
+             )
+
+        # --- Smart Defaults for Modes ---
+        speaker_voices_map: Optional[list[dict[str, Any]]] = None
+        speakers_list_for_gen = []
+
+        if args.mode:
+            config = SCRIPT_STYLES[args.mode]
+
+            # 1. Default Audio Format (Default to MP3 for generated content)
             if args.audio_format == "WAV":
-                print("Summary mode: Defaulting audio format to MP3.", file=sys.stderr)
+                print(
+                    f"{args.mode.capitalize()} mode: Defaulting audio format to MP3.",
+                    file=sys.stderr
+                )
                 args.audio_format = "MP3"
+
+            # 2. Configure Speakers
+            if not args.speaker_voices:
+                # Apply defaults from config
+                default_voices = config["default_voices"]
+                args.speaker_voices = [f"{s}={v}" for s, v in default_voices.items()]
+
+                # Automatically enable multi-speaker if > 1 speaker
+                if len(default_voices) > 1:
+                    args.multi_speaker = True
+                else:
+                    # Single speaker mode - ensure voice_name matches
+                    args.voice_name = list(default_voices.values())[0]
+
+                print(
+                    f"{args.mode.capitalize()} mode: Using default speakers: "
+                    f"{', '.join(args.speaker_voices)}",
+                    file=sys.stderr
+                )
+
+            # Populate speaker list for generation
+            if args.multi_speaker:
+                for sv in args.speaker_voices:
+                     speaker, _ = sv.split('=', 1)
+                     speakers_list_for_gen.append(speaker)
+            else:
+                 speakers_list_for_gen = config["default_speakers"]
 
         # Input validation logic
-        input_sources = sum(1 for x in [args.text, args.input_file, args.generate_transcript] if x)
-        
         if args.input_file and args.text:
             parser.error("argument --input-file: not allowed with a text argument.")
         if args.input_file and not sys.stdin.isatty():
              parser.error("--input-file: not allowed when piping text via stdin.")
-        
-        # Determine speakers FIRST
-        speaker_voices_map: Optional[List[Dict[str, Any]]] = None
-        speakers_list_for_gen = []
-        
-        if args.multi_speaker:
-            if not args.speaker_voices:
-                parser.error("--multi-speaker requires --speaker-voices.")
-            
-            speaker_voices_map = []
-            for sv_pair in args.speaker_voices:
-                if '=' not in sv_pair:
-                    parser.error(f"Invalid --speaker-voices format: {sv_pair}. Expected SPEAKER=VOICE_NAME.")
+
+        # Determine speakers for custom/transcript modes (if not set by mode logic)
+        if not args.mode:
+            if args.multi_speaker:
+                if not args.speaker_voices:
+                    parser.error("--multi-speaker requires --speaker-voices.")
+
+                for sv_pair in args.speaker_voices:
+                    if '=' not in sv_pair:
+                        parser.error(
+                            f"Invalid --speaker-voices format: {sv_pair}. "
+                            "Expected SPEAKER=VOICE_NAME."
+                        )
+                    speaker, voice_name = sv_pair.split('=', 1)
+                    speakers_list_for_gen.append(speaker)
+            elif args.speaker_voices:
+                parser.error("--speaker-voices can only be used with --multi-speaker.")
+            else:
+                # Defaults
+                speakers_list_for_gen = ["Narrator"]
+
+        # Parse speaker map for TTS engine (common for all paths)
+        if args.multi_speaker and args.speaker_voices:
+             speaker_voices_map = []
+             for sv_pair in args.speaker_voices:
                 speaker, voice_name = sv_pair.split('=', 1)
-                speakers_list_for_gen.append(speaker)
-                # Construct as dictionary directly
                 speaker_voices_map.append({
                     "speaker": speaker,
                     "voice_config": {
@@ -276,18 +323,14 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
                         }
                     }
                 })
-        elif args.speaker_voices:
-            parser.error("--speaker-voices can only be used with --multi-speaker.")
-        else:
-            # Defaults
-            if args.podcast:
-                speakers_list_for_gen = ["Host", "Guest"]
-            else:
-                speakers_list_for_gen = ["Narrator"]
 
         # Handle Content Generation & Input Reading
         if args.generate_transcript:
-            print(f"Generating transcript for topic: '{args.generate_transcript}' using {args.transcript_model}...", file=sys.stderr)
+            print(
+                f"Generating transcript for topic: '{args.generate_transcript}' "
+                f"using {args.transcript_model}...",
+                file=sys.stderr
+            )
             text_to_synthesize = generate_transcript_gemini(
                 topic=args.generate_transcript,
                 speakers=speakers_list_for_gen,
@@ -296,41 +339,37 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
             print("\n--- Generated Transcript ---", file=sys.stderr)
             print(text_to_synthesize, file=sys.stderr)
             print("----------------------------\n", file=sys.stderr)
-            
+
         else:
-            # Read input first (for normal TTS or Podcast source)
+            # Read input first (for normal TTS or Mode-based source)
             raw_input_text = ""
             if args.input_file:
-                with open(args.input_file, 'r') as f:
+                with open(args.input_file) as f:
                     raw_input_text = f.read()
             elif args.text:
                 raw_input_text = args.text
             elif not sys.stdin.isatty():
                 raw_input_text = sys.stdin.read().strip()
-            
+
             if not raw_input_text and not args.detailed_prompt_file:
                  parser.error(
                     "No input provided. Please provide text, --input-file, --generate-transcript, "
                     "or pipe text to the script."
                 )
 
-            if args.podcast:
-                print(f"Generating podcast script from input content using {args.transcript_model}...", file=sys.stderr)
-                text_to_synthesize = generate_podcast_script(
+            if args.mode:
+                print(
+                    f"Generating {args.mode} script from input content using "
+                    f"{args.transcript_model}...",
+                    file=sys.stderr
+                )
+                text_to_synthesize = generate_styled_script(
                     source_text=raw_input_text,
+                    mode=args.mode,
                     speakers=speakers_list_for_gen,
                     model=args.transcript_model
                 )
-                print("\n--- Generated Podcast Script ---", file=sys.stderr)
-                print(text_to_synthesize, file=sys.stderr)
-                print("--------------------------------\n", file=sys.stderr)
-            elif args.summary:
-                print(f"Generating summary from input content using {args.transcript_model}...", file=sys.stderr)
-                text_to_synthesize = generate_summary_script(
-                    source_text=raw_input_text,
-                    model=args.transcript_model
-                )
-                print("\n--- Generated Summary Script ---", file=sys.stderr)
+                print(f"\n--- Generated {args.mode.capitalize()} Script ---", file=sys.stderr)
                 print(text_to_synthesize, file=sys.stderr)
                 print("--------------------------------\n", file=sys.stderr)
             else:
@@ -338,20 +377,31 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
 
         # Detailed prompt handling
         if args.detailed_prompt_file:
-            with open(args.detailed_prompt_file, 'r') as f:
+            with open(args.detailed_prompt_file) as f:
                 detailed_prompt_content = f.read()
             if text_to_synthesize:
-                detailed_prompt_content = detailed_prompt_content + "\n#### TRANSCRIPT\n" + text_to_synthesize
+                detailed_prompt_content = (
+                    detailed_prompt_content + "\n#### TRANSCRIPT\n" + text_to_synthesize
+                )
             text_to_synthesize = detailed_prompt_content
 
         if args.temp and args.no_play:
             parser.error("--temp cannot be used with --no-play.")
 
         # Multi-speaker prompt validation
-        if args.multi_speaker and not args.detailed_prompt_file and not (args.generate_transcript or args.podcast):
-            if not any(f"{s.get('speaker')}:" in text_to_synthesize for s in speaker_voices_map):
-                 print("Warning: In multi-speaker mode without a detailed prompt, ensure your text is formatted as 'SpeakerName: Text' for proper voice assignment.", file=sys.stderr)
-        
+        if args.multi_speaker and not args.detailed_prompt_file:
+            if not (args.generate_transcript or args.mode):
+                speaker_in_text = any(
+                    f"{s.get('speaker')}:" in text_to_synthesize for s in speaker_voices_map
+                )
+                if not speaker_in_text:
+                     print(
+                         "Warning: In multi-speaker mode without a detailed prompt, ensure "
+                         "your text is formatted as 'SpeakerName: Text' for proper "
+                         "voice assignment.",
+                         file=sys.stderr
+                     )
+
         # Validate voice name for single speaker
         if not args.multi_speaker and not args.list_voices:
             try:
@@ -379,7 +429,7 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
             if args.output_file:
                 print("Warning: --output-file is ignored when --temp is used.",
                       file=sys.stderr)
-            
+
             suffix = f".{args.audio_format.lower()}"
             with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) \
                     as temp_audio_file:
@@ -392,7 +442,7 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
                     sys.exit(1)
         else:
             output_filename = (
-                args.output_file or 
+                args.output_file or
                 create_filename(text_to_synthesize, args.audio_format)
             )
             try:
