@@ -76,7 +76,7 @@ SCRIPT_STYLES = {
     },
     "news": {
         "default_speakers": ["Anchor", "Reporter"],
-        "default_voices": {"Anchor": "Zephyr", "Reporter": "Leda"},
+        "default_voices": {"Anchor": "Charon", "Reporter": "Leda"},
         "prompt_template": (
             "Present the source text as a breaking news segment.\n"
             "Speakers: {speakers_str}\n"
