@@ -55,19 +55,15 @@ def ensure_config_exists() -> None:
 class Settings:
     """Manages application settings, primarily Google Cloud credentials and project ID."""
 
-    def __init__(self) -> None:
-        self._google_api_key = os.getenv("GOOGLE_API_KEY")
-        self._gcloud_project = os.getenv("GCLOUD_PROJECT", "ucr-research-computing")
-
     @property
     def google_api_key(self) -> str:
         """Return the Google API Key from environment variables."""
-        return self._google_api_key or ""
+        return os.getenv("GOOGLE_API_KEY") or ""
 
     @property
     def gcloud_project(self) -> str:
         """Return the Google Cloud Project ID from environment variables."""
-        return self._gcloud_project
+        return os.getenv("GCLOUD_PROJECT", "ucr-research-computing")
 
 # Singleton instance
 settings = Settings()
