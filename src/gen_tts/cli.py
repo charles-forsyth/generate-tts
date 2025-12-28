@@ -168,7 +168,7 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
         "--model", type=str, default="gemini-2.5-flash-preview-tts",
         help=(
             "The Gemini TTS model to use. Default: 'gemini-2.5-flash-preview-tts'. "
-            "Other options include 'gemini-2.5-pro-tts' and 'gemini-2.5-pro-preview-tts'."
+            "Other options include 'gemini-2.5-pro-preview-tts'."
         )
     )
     voice_group.add_argument(
