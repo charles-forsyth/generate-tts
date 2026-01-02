@@ -140,6 +140,10 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
         )
     )
     output_group.add_argument(
+        "--script-txt-out", type=str, metavar="FILE",
+        help="Save the generated transcript text to a file."
+    )
+    output_group.add_argument(
         "--audio-format", type=str, default="WAV",
         choices=["WAV", "MP3"],
         help=(
@@ -384,6 +388,17 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
                     detailed_prompt_content + "\n#### TRANSCRIPT\n" + text_to_synthesize
                 )
             text_to_synthesize = detailed_prompt_content
+
+        if args.script_txt_out:
+            try:
+                with open(args.script_txt_out, 'w') as f:
+                    f.write(text_to_synthesize)
+                print(f"Transcript saved to: {args.script_txt_out}", file=sys.stderr)
+            except OSError as e:
+                print(
+                    f"Warning: Could not save transcript to {args.script_txt_out}: {e}",
+                    file=sys.stderr
+                )
 
         if args.temp and args.no_play:
             parser.error("--temp cannot be used with --no-play.")
