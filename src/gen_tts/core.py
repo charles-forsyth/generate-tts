@@ -117,7 +117,7 @@ SCRIPT_STYLES = {
 def generate_transcript_gemini(
     topic: str,
     speakers: list[str],
-    model: str = "gemini-2.0-flash"
+    model: str = "gemini-3.8-flash"
 ) -> str:
     """Generate a conversation transcript using Gemini, formatted for TTS."""
     api_key = settings.google_api_key
@@ -165,7 +165,7 @@ def generate_styled_script(
     source_text: str,
     mode: str,
     speakers: Optional[list[str]] = None,
-    model: str = "gemini-2.0-flash"
+    model: str = "gemini-3.8-flash"
 ) -> str:
     """Generate a script from source text using a specific style mode."""
     if mode not in SCRIPT_STYLES:
@@ -212,14 +212,14 @@ def generate_styled_script(
 def generate_podcast_script(
     source_text: str,
     speakers: list[str],
-    model: str = "gemini-2.0-flash"
+    model: str = "gemini-3.8-flash"
 ) -> str:
     """Wrap generate_styled_script for backward compatibility."""
     return generate_styled_script(source_text, "podcast", speakers, model)
 
 def generate_summary_script(
     source_text: str,
-    model: str = "gemini-2.0-flash"
+    model: str = "gemini-3.8-flash"
 ) -> str:
     """Wrap generate_styled_script for backward compatibility."""
     return generate_styled_script(source_text, "summary", ["Narrator"], model)

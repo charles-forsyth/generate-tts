@@ -125,8 +125,8 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
         help="Alias for --mode summary. Convert input into a concise summary."
     )
     gen_group.add_argument(
-        "--transcript-model", type=str, default="gemini-2.5-pro",
-        help="The model to use for generating the transcript/script. Default: 'gemini-2.5-pro'."
+        "--transcript-model", type=str, default="gemini-3.1-pro-preview",
+        help="The model to use for generating the transcript/script. Default: 'gemini-3.1-pro-preview'."
     )
 
     # --- Output Arguments ---
@@ -169,10 +169,10 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
     # --- Voice Configuration ---
     voice_group = parser.add_argument_group('Voice Configuration')
     voice_group.add_argument(
-        "--model", type=str, default="gemini-2.5-flash-preview-tts",
+        "--model", type=str, default="gemini-3.8-flash-tts",
         help=(
-            "The Gemini TTS model to use. Default: 'gemini-2.5-flash-preview-tts'. "
-            "Other options include 'gemini-2.5-pro-preview-tts'."
+            "The Gemini TTS model to use. Default: 'gemini-3.8-flash-tts'. "
+            "Other options: 'gemini-3.8-flash-lite-tts' (cheaper)."
         )
     )
     voice_group.add_argument(

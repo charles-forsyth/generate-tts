@@ -105,8 +105,8 @@ gen-tts --input-file script.txt --multi-speaker \
 | `--speaker-voices` | Map speakers to voices (e.g., `Host=Fenrir Guest=Leda`). |
 | `--voice-name` | Voice for single-speaker mode (Default: `Charon`). |
 | `--audio-format` | `WAV` or `MP3`. Defaults to `MP3` for podcasts/summaries. |
-| `--model` | TTS Model (Default: `gemini-2.5-flash-preview-tts`). |
-| `--transcript-model` | Model for script generation (Default: `gemini-2.5-pro`). |
+| `--model` | TTS Model (Default: `gemini-3.8-flash-tts`; `gemini-3.8-flash-lite-tts` is cheaper). |
+| `--transcript-model` | Model for script generation (Default: `gemini-3.1-pro-preview`). |
 | `--list-voices` | List all available Gemini voices. |
 | `--no-play` | Disable automatic playback. |
 
