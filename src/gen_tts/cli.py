@@ -289,10 +289,11 @@ For more details, visit: https://github.com/charles-forsyth/generate-tts
                  speakers_list_for_gen = config["default_speakers"]
 
         # Input validation logic
+        # Input precedence: --input-file, then text argument, then stdin.
+        # (Non-interactive stdin, e.g. cron or scripts, is not treated as a pipe
+        # when a file or text is given explicitly.)
         if args.input_file and args.text:
             parser.error("argument --input-file: not allowed with a text argument.")
-        if args.input_file and not sys.stdin.isatty():
-             parser.error("--input-file: not allowed when piping text via stdin.")
 
         # Determine speakers for custom/transcript modes (if not set by mode logic)
         if not args.mode:

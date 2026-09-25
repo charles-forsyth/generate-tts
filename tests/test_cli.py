@@ -55,3 +55,28 @@ def test_no_input_error() -> None:
         print("\nNo input error test passed successfully.")
     except FileNotFoundError:
         pytest.fail("gen-tts command not found. Ensure the project is installed.")
+
+
+
+def test_input_file_with_non_tty_stdin(tmp_path, monkeypatch) -> None:
+    """--input-file must work when stdin is not a terminal (cron, scripts)."""
+    import io
+    from unittest.mock import patch
+
+    from gen_tts import cli
+
+    src = tmp_path / "in.txt"
+    src.write_text("Hello from a file.")
+    out = tmp_path / "out.wav"
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))  # non-tty
+    monkeypatch.setattr(
+        sys, "argv",
+        ["gen-tts", "--input-file", str(src), "--no-play", "--output-file", str(out)],
+    )
+    with patch.object(cli, "generate_speech_gemini") as gen:
+        try:
+            cli.main()
+        except SystemExit as e:
+            assert e.code in (0, None), "argparse rejected --input-file with non-tty stdin"
+    assert gen.called
+    assert "Hello from a file." in str(gen.call_args)
