@@ -13,3 +13,4 @@ src/gen_tts.egg-info/entry_points.txt
 src/gen_tts.egg-info/requires.txt
 src/gen_tts.egg-info/top_level.txt
 tests/test_cli.py
+tests/test_multi_speaker.py
