@@ -1,12 +1,12 @@
 [project]
 name = "gen-tts"
-version = "0.2.1"
+version = "0.2.2"
 description = "Generate high-quality speech from text using Google Gemini's native Text-to-Speech (TTS) capabilities, including single and multi-speaker options."
 authors = [
     { name = "Chuck Forsyth", email = "forsythc@ucr.edu" }
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { file = "LICENSE" }
 keywords = ["gemini", "tts", "text-to-speech", "multi-speaker", "audio", "generation", "google-cloud"]
 classifiers = [
@@ -28,7 +28,7 @@ classifiers = [
 
 dependencies = [
     "python-dotenv>=1.0.0",
-    "google-genai>=1.0.0", # For Gemini V2 API
+    "google-genai>=2.25.0", # For Gemini V2 API
 
     "soundfile>=0.12.1", # If any audio processing/conversion is needed
 
@@ -65,4 +65,9 @@ ignore = [
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
 # addopts = "--cov=gen_tts --cov-report=term-missing --no-cov-on-fail"

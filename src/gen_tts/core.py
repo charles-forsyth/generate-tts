@@ -224,6 +224,42 @@ def generate_summary_script(
     """Wrap generate_styled_script for backward compatibility."""
     return generate_styled_script(source_text, "summary", ["Narrator"], model)
 
+
+def _multi_speaker_contents(text: str, speakers: list[str]) -> types.Content:
+    """Turn a 'Name: line' transcript into Parts tagged with speech_metadata.speaker.
+
+    Lines without a known speaker prefix are appended to the previous speaker's part
+    (or given to the first speaker). Leading instruction text before the first
+    speaker line is kept on the first part.
+    """
+    known = {s.lower(): s for s in speakers}
+    parts: list[types.Part] = []
+    preamble: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        name, sep, rest = line.partition(":")
+        who = known.get(name.strip().strip("*").lower()) if sep else None
+        if who and rest.strip():
+            body = rest.strip()
+            if preamble and not parts:
+                body = " ".join(preamble) + " " + body
+                preamble = []
+            parts.append(types.Part(text=body, speech_metadata=types.SpeechMetadata(speaker=who)))
+        elif parts:
+            parts[-1].text = f"{parts[-1].text} {line}"
+        else:
+            preamble.append(line)
+    if not parts:
+        parts = [
+            types.Part(
+                text=" ".join(preamble) or text,
+                speech_metadata=types.SpeechMetadata(speaker=speakers[0]),
+            )
+        ]
+    return types.Content(role="user", parts=parts)
+
 def generate_speech_gemini(
     text: str,
     output_file: str,
@@ -281,10 +317,16 @@ def generate_speech_gemini(
     else:
         raise ValueError("Either voice_name or speaker_voices_map must be provided.")
 
+    contents: Any = text
+    if speaker_voices_map:
+        # Current Gemini TTS requires each multi-speaker text part to carry
+        # speech_metadata.speaker. Split "Speaker: line" transcripts into parts.
+        contents = _multi_speaker_contents(text, [sv["speaker"] for sv in speaker_voices_map])
+
     try:
         response = client.models.generate_content(
             model=model,
-            contents=text,
+            contents=contents,
             config=types.GenerateContentConfig(
                 response_modalities=["AUDIO"],
                 speech_config=speech_config
