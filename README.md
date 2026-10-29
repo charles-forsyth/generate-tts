@@ -1,5 +1,7 @@
 # Gen-TTS: Gemini Native Audio Generation CLI
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23755689.svg)](https://doi.org/10.5281/zenodo.23755689)
+
 `gen-tts` is a command-line interface for Google's Gemini Native Text-to-Speech (TTS) capabilities (`gemini-3.8-flash-tts` default). It generates single-speaker narration, multi-speaker conversations, and AI-written podcasts, debates, interviews, and summaries.
 
 See [SPEC.md](SPEC.md) for the full system specification, multi-speaker wire format, architecture, and requirement traceability.
